@@ -19,7 +19,7 @@ namespace tn {
 
 static void usage() {
   std::cout << "tanknet --server --port 27015\n"
-               "tanknet --client --host 127.0.0.1 --port 27015 --name P1\n";
+               "tanknet --client --host 127.0.0.1 --port 27015 --name P1 [--vsync 0|1] [--fpscap N]\n";
 }
 
 struct Args {
@@ -28,6 +28,8 @@ struct Args {
   uint16_t port{27015};
   std::string host{"127.0.0.1"};
   std::string name{"P"};
+  int vsync{0};
+  int fpscap{0}; // 0 = uncapped
 };
 
 static Args parse(int argc, char** argv) {
@@ -43,6 +45,8 @@ static Args parse(int argc, char** argv) {
     else if (s == "--port") a.port = (uint16_t)std::stoi(next());
     else if (s == "--host") a.host = next();
     else if (s == "--name") a.name = next();
+    else if (s == "--vsync") a.vsync = std::stoi(next("0"));
+    else if (s == "--fpscap") a.fpscap = std::stoi(next("0"));
     else if (s == "--help" || s == "-h") { usage(); std::exit(0); }
   }
   return a;
@@ -94,7 +98,7 @@ int main(int argc, char** argv) {
 
   Renderer rr;
   RenderConfig rc;
-  if (!rr.init(rc)) {
+  if (!rr.init(rc, args.vsync != 0)) {
     std::cerr << "SDL init failed\n";
     return 2;
   }
@@ -256,8 +260,22 @@ int main(int argc, char** argv) {
 
     rr.end();
 
-    // Manual cap to reduce CPU burn; keep low (1-2ms).
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Frame pacing
+    if (args.fpscap > 0) {
+      static uint64_t lastFrameMs = nowMs();
+      const uint64_t frameTarget = 1000 / (uint64_t)std::max(1, args.fpscap);
+      const uint64_t now = ms;
+      const uint64_t elapsed = now - lastFrameMs;
+      if (elapsed < frameTarget) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(frameTarget - elapsed));
+      } else {
+        std::this_thread::yield();
+      }
+      lastFrameMs = nowMs();
+    } else {
+      // No cap: tiny sleep to be polite but keep latency low.
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
   }
 
   rr.shutdown();

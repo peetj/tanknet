@@ -3,7 +3,7 @@
 
 namespace tn {
 
-bool Renderer::init(const RenderConfig& c) {
+bool Renderer::init(const RenderConfig& c, bool vsync) {
   cfg = c;
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) return false;
 
@@ -11,8 +11,9 @@ bool Renderer::init(const RenderConfig& c) {
                             cfg.w, cfg.h, SDL_WINDOW_SHOWN);
   if (!window) return false;
 
-  // Request vsync OFF for minimal latency; we cap manually.
-  r = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  // Vsync OFF by default for minimal latency.
+  uint32_t flags = SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
+  r = SDL_CreateRenderer(window, -1, flags);
   if (!r) return false;
 
   SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "1");

@@ -12,7 +12,7 @@ struct RenderConfig {
 
 class Renderer {
 public:
-  bool init(const RenderConfig& cfg);
+  bool init(const RenderConfig& cfg, bool vsync);
   void shutdown();
 
   void begin();
