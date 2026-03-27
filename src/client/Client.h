@@ -14,6 +14,7 @@ struct ClientView {
   uint64_t recvMs{0};
   std::array<uint32_t, kMaxPlayers> ackSeq{};
   std::array<float, kMaxPlayers> fireCd{};
+  float roundResetTimer{0.0f};
 };
 
 class Client {

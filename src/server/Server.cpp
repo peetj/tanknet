@@ -82,6 +82,9 @@ void Server::broadcastSnapshot() {
     w.f32(sim.fireCd[i]);
   }
 
+  // Round state
+  w.f32(roundResetTimer);
+
   // Projectiles: send only active ones (lower bandwidth)
   uint16_t activeCount = 0;
   for (int i=0;i<kMaxProjectiles;i++) if (s.projectiles[i].active) activeCount++;

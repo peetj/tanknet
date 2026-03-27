@@ -102,6 +102,9 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
       v.fireCd[i] = r.f32();
     }
 
+    // Round state
+    v.roundResetTimer = r.f32();
+
     // Projectiles: clear then fill actives
     for (auto& pr : v.snap.projectiles) pr = {};
     const uint16_t active = r.u16();

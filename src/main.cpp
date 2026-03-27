@@ -225,13 +225,21 @@ int main(int argc, char** argv) {
       }
     }
 
-    // Update window title with RTT (cheap HUD without extra deps)
+    // Update window title (cheap HUD without extra deps)
     if (net.hasWelcome() && rr.window && (ms - lastTitleMs) > 250) {
       lastTitleMs = ms;
-      // ENet RTT is in ms on the peer.
-      // (Not perfect but good enough for feedback.)
       const char* title = "TankNet";
-      std::string t = std::string(title) + " | rtt=" + std::to_string(net.rttMs()) + "ms";
+
+      int hp0 = renderSnap.players[0].hp;
+      int hp1 = renderSnap.players[1].hp;
+      float resetT = 0.0f;
+      if (!net.snapshots().empty()) resetT = net.snapshots().back().roundResetTimer;
+
+      std::string t = std::string(title)
+        + " | rtt=" + std::to_string(net.rttMs()) + "ms"
+        + " | hp=" + std::to_string(hp0) + ":" + std::to_string(hp1);
+      if (resetT > 0.0f) t += " | reset " + std::to_string((int)std::ceil(resetT));
+
       SDL_SetWindowTitle(rr.window, t.c_str());
     }
 
