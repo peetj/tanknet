@@ -48,7 +48,8 @@ std::optional<int> Server::allocSlot(ENetPeer* peer) {
       clients[i].peer = peer;
       clients[i].connected = true;
       clients[i].playerIndex = (uint32_t)i;
-      clients[i].lastInput = {};
+      clients[i].lastProcessedInput = {};
+      clients[i].pending.clear();
       return i;
     }
   }
@@ -82,16 +83,16 @@ void Server::broadcastSnapshot() {
     w.i16(qAim(p.aimRad));
     w.u8((uint8_t)p.hp);
     w.u8((uint8_t)(p.alive ? 1 : 0));
-    w.u32(clients[i].connected ? clients[i].lastInputSeq : 0u);
+    w.u32(clients[i].connected ? clients[i].lastProcessedSeq : 0u);
     w.u16(qCd(sim.fireCd[i]));
   }
 
   // Round state
   w.u16((uint16_t)std::lround(std::max(0.0f, roundResetTimer) * 1000.0f));
 
-  // Projectiles: send only active ones (lower bandwidth)
+  // Projectiles: send only active ones (lower bandwidth).
+  // Further shrink: we don't serialize velocity (client doesn't use it for rendering).
   auto qPos = [](float v) { return (int16_t)std::lround(v * 16.0f); };      // 1/16 px
-  auto qVel = [](float v) { return (int16_t)std::lround(v * 8.0f); };       // 1/8 px/s
   auto qTtl = [](float v) { return (uint16_t)std::lround(std::max(0.0f, v) * 1000.0f); }; // ms
 
   uint16_t activeCount = 0;
@@ -103,7 +104,6 @@ void Server::broadcastSnapshot() {
     w.u16((uint16_t)i);
     w.u32(pr.ownerId);
     w.i16(qPos(pr.pos.x)); w.i16(qPos(pr.pos.y));
-    w.i16(qVel(pr.vel.x)); w.i16(qVel(pr.vel.y));
     w.u16(qTtl(pr.ttl));
   }
 
@@ -140,10 +140,21 @@ void Server::handlePacket(ENetPeer* peer, const uint8_t* data, size_t len) {
     in.shoot = r.u8();
 
     auto& c = clients[*slot];
-    if (in.seq >= c.lastInputSeq) {
-      c.lastInputSeq = in.seq;
-      c.lastInput = in;
+    // Best-effort ordering: drop duplicates/old; keep a tiny ordered queue.
+    if (in.seq <= c.lastReceivedSeq) return;
+    c.lastReceivedSeq = in.seq;
+
+    // Insert sorted (queue is small).
+    auto it = c.pending.end();
+    while (it != c.pending.begin()) {
+      auto prev = std::prev(it);
+      if (prev->seq < in.seq) break;
+      it = prev;
     }
+    c.pending.insert(it, in);
+
+    // Bound memory.
+    while (c.pending.size() > 256) c.pending.pop_front();
   }
 }
 
@@ -183,7 +194,38 @@ void Server::run() {
 
       std::array<InputCmd, kMaxPlayers> ins{};
       for (int i=0;i<kMaxPlayers;i++) {
-        ins[i] = clients[i].connected ? clients[i].lastInput : InputCmd{};
+        auto& c = clients[i];
+        if (!c.connected) { ins[i] = InputCmd{}; continue; }
+
+        const uint32_t want = c.lastProcessedSeq + 1;
+        bool found = false;
+
+        // Prefer exact next seq if present.
+        if (!c.pending.empty() && c.pending.front().seq == want) {
+          c.lastProcessedInput = c.pending.front();
+          c.pending.pop_front();
+          found = true;
+        } else {
+          for (auto it = c.pending.begin(); it != c.pending.end(); ++it) {
+            if (it->seq == want) {
+              c.lastProcessedInput = *it;
+              c.pending.erase(it);
+              found = true;
+              break;
+            }
+          }
+        }
+
+        InputCmd use = c.lastProcessedInput;
+        use.seq = want;
+        if (!found) {
+          // If we missed an input (loss/jitter), don't "hold" shoot and accidentally fire later.
+          use.shoot = 0;
+        }
+
+        c.lastProcessedSeq = want;
+        c.lastProcessedInput = use;
+        ins[i] = use;
       }
       sim.step(dt, ins);
 

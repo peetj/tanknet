@@ -3,6 +3,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <deque>
 #include "net/NetCommon.h"
 #include "net/Protocol.h"
 #include "game/Sim.h"
@@ -26,8 +27,13 @@ private:
     ENetPeer* peer{nullptr};
     bool connected{false};
     uint32_t playerIndex{0};
-    uint32_t lastInputSeq{0};
-    InputCmd lastInput{};
+
+    // Input sequencing.
+    uint32_t lastReceivedSeq{0};
+    uint32_t lastProcessedSeq{0};
+    InputCmd lastProcessedInput{};
+    std::deque<InputCmd> pending; // small, ordered by seq (best-effort)
+
     std::string name;
   };
 
