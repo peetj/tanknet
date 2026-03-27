@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
 
   const uint64_t interpDelayMs = 80; // small buffer for jitter hiding
 
-  uint64_t lastMs = nowMs();
+  uint64_t lastSimMs = nowMs();
   uint64_t lastInputSendMs = nowMs();
 
   uint64_t lastTitleMs = nowMs();
@@ -176,16 +176,22 @@ int main(int argc, char** argv) {
     cmd.aimQ = (int16_t)std::lround(aim * 1000.0f);
     cmd.shoot = shoot ? 1 : 0;
 
-    // Local prediction at fixed ticks (client tick)
+    // Local prediction at fixed ticks (client tick). Catch up if we miss frames.
     const uint64_t ms = nowMs();
     const uint64_t tickMs = 1000 / kTickHz;
-    if (ms - lastMs >= tickMs) {
-      lastMs += tickMs;
+    int steps = 0;
+    while (ms - lastSimMs >= tickMs && steps < 5) {
+      lastSimMs += tickMs;
       std::array<InputCmd, kMaxPlayers> ins{};
       ins[myIndex] = cmd;
       local.step(1.0f/(float)kTickHz, ins);
       sent.push_back({cmd.seq, cmd});
       while (sent.size() > 512) sent.pop_front();
+      steps++;
+    }
+    if (steps == 5) {
+      // If we're far behind, resync timing to avoid spiraling.
+      lastSimMs = ms;
     }
 
     // Send input at inputHz
@@ -284,16 +290,14 @@ int main(int argc, char** argv) {
 
     // Frame pacing
     if (args.fpscap > 0) {
-      static uint64_t lastFrameMs = nowMs();
       const uint64_t frameTarget = 1000 / (uint64_t)std::max(1, args.fpscap);
-      const uint64_t now = ms;
-      const uint64_t elapsed = now - lastFrameMs;
+      const uint64_t frameEnd = nowMs();
+      const uint64_t elapsed = frameEnd - ms; // ms was taken near the top of this frame
       if (elapsed < frameTarget) {
         std::this_thread::sleep_for(std::chrono::milliseconds(frameTarget - elapsed));
       } else {
         std::this_thread::yield();
       }
-      lastFrameMs = nowMs();
     } else {
       // No cap: tiny sleep to be polite but keep latency low.
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
