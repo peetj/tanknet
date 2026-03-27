@@ -70,22 +70,30 @@ void Server::broadcastSnapshot() {
   w.u8((uint8_t)MsgType::Snapshot);
   w.u32(s.tick);
 
+  auto qPos = [](float v) { return (int16_t)std::lround(v * 16.0f); };      // 1/16 px
+  auto qAim = [](float v) { return (int16_t)std::lround(v * 1000.0f); };    // rad*1000
+  auto qCd  = [](float v) { return (uint16_t)std::lround(v * 1000.0f); };   // sec*1000
+
   // Players + last processed input seq (ack)
   for (int i=0;i<kMaxPlayers;i++) {
     const auto& p = s.players[i];
     w.u32(p.id);
-    w.f32(p.pos.x); w.f32(p.pos.y);
-    w.f32(p.aimRad);
+    w.i16(qPos(p.pos.x)); w.i16(qPos(p.pos.y));
+    w.i16(qAim(p.aimRad));
     w.u8((uint8_t)p.hp);
     w.u8((uint8_t)(p.alive ? 1 : 0));
     w.u32(clients[i].connected ? clients[i].lastInputSeq : 0u);
-    w.f32(sim.fireCd[i]);
+    w.u16(qCd(sim.fireCd[i]));
   }
 
   // Round state
-  w.f32(roundResetTimer);
+  w.u16((uint16_t)std::lround(std::max(0.0f, roundResetTimer) * 1000.0f));
 
   // Projectiles: send only active ones (lower bandwidth)
+  auto qPos = [](float v) { return (int16_t)std::lround(v * 16.0f); };      // 1/16 px
+  auto qVel = [](float v) { return (int16_t)std::lround(v * 8.0f); };       // 1/8 px/s
+  auto qTtl = [](float v) { return (uint16_t)std::lround(std::max(0.0f, v) * 1000.0f); }; // ms
+
   uint16_t activeCount = 0;
   for (int i=0;i<kMaxProjectiles;i++) if (s.projectiles[i].active) activeCount++;
   w.u16(activeCount);
@@ -94,9 +102,9 @@ void Server::broadcastSnapshot() {
     if (!pr.active) continue;
     w.u16((uint16_t)i);
     w.u32(pr.ownerId);
-    w.f32(pr.pos.x); w.f32(pr.pos.y);
-    w.f32(pr.vel.x); w.f32(pr.vel.y);
-    w.f32(pr.ttl);
+    w.i16(qPos(pr.pos.x)); w.i16(qPos(pr.pos.y));
+    w.i16(qVel(pr.vel.x)); w.i16(qVel(pr.vel.y));
+    w.u16(qTtl(pr.ttl));
   }
 
   auto* pkt = enet_packet_create(w.b.data(), w.b.size(), 0);

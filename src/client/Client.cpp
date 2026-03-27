@@ -91,21 +91,30 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
     v.recvMs = nowMs();
     v.snap.tick = r.u32();
 
+    auto dqPos = [](int16_t q) { return (float)q / 16.0f; };
+    auto dqAim = [](int16_t q) { return (float)q / 1000.0f; };
+    auto dqCd  = [](uint16_t q) { return (float)q / 1000.0f; };
+
     for (int i=0;i<kMaxPlayers;i++) {
       auto& p = v.snap.players[i];
       p.id = r.u32();
-      p.pos.x = r.f32(); p.pos.y = r.f32();
-      p.aimRad = r.f32();
+      p.pos.x = dqPos(r.i16());
+      p.pos.y = dqPos(r.i16());
+      p.aimRad = dqAim(r.i16());
       p.hp = (int)r.u8();
       p.alive = r.u8() != 0;
       v.ackSeq[i] = r.u32();
-      v.fireCd[i] = r.f32();
+      v.fireCd[i] = dqCd(r.u16());
     }
 
     // Round state
-    v.roundResetTimer = r.f32();
+    v.roundResetTimer = dqCd(r.u16());
 
     // Projectiles: clear then fill actives
+    auto dqPos = [](int16_t q) { return (float)q / 16.0f; };
+    auto dqVel = [](int16_t q) { return (float)q / 8.0f; };
+    auto dqTtl = [](uint16_t q) { return (float)q / 1000.0f; };
+
     for (auto& pr : v.snap.projectiles) pr = {};
     const uint16_t active = r.u16();
     for (uint16_t n=0;n<active;n++) {
@@ -114,9 +123,9 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
       auto& pr = v.snap.projectiles[idx];
       pr.active = true;
       pr.ownerId = r.u32();
-      pr.pos.x = r.f32(); pr.pos.y = r.f32();
-      pr.vel.x = r.f32(); pr.vel.y = r.f32();
-      pr.ttl = r.f32();
+      pr.pos.x = dqPos(r.i16()); pr.pos.y = dqPos(r.i16());
+      pr.vel.x = dqVel(r.i16()); pr.vel.y = dqVel(r.i16());
+      pr.ttl = dqTtl(r.u16());
     }
 
     views.push_back(v);
