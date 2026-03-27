@@ -112,7 +112,6 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
 
     // Projectiles: clear then fill actives
     auto dqPos = [](int16_t q) { return (float)q / 16.0f; };
-    auto dqVel = [](int16_t q) { return (float)q / 8.0f; };
     auto dqTtl = [](uint16_t q) { return (float)q / 1000.0f; };
 
     for (auto& pr : v.snap.projectiles) pr = {};
@@ -124,7 +123,7 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
       pr.active = true;
       pr.ownerId = r.u32();
       pr.pos.x = dqPos(r.i16()); pr.pos.y = dqPos(r.i16());
-      pr.vel.x = dqVel(r.i16()); pr.vel.y = dqVel(r.i16());
+      pr.vel = {0,0};
       pr.ttl = dqTtl(r.u16());
     }
 
