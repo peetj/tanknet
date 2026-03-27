@@ -5,6 +5,7 @@
 #include <deque>
 #include <chrono>
 #include <thread>
+#include <cmath>
 
 #include "net/Protocol.h"
 #include "net/NetCommon.h"
@@ -60,18 +61,39 @@ static uint8_t encAxis(float v) {
   return (uint8_t)iv;
 }
 
+static float lerpAngle(float a, float b, float t) {
+  // Shortest-arc angle lerp.
+  float d = std::fmod(b - a, 2.0f * (float)M_PI);
+  if (d > (float)M_PI) d -= 2.0f * (float)M_PI;
+  if (d < -(float)M_PI) d += 2.0f * (float)M_PI;
+  return a + d * t;
+}
+
 static Snapshot interp(const ClientView& a, const ClientView& b, float t) {
   Snapshot s = a.snap;
   for (int i=0;i<kMaxPlayers;i++) {
     s.players[i].pos.x = a.snap.players[i].pos.x + (b.snap.players[i].pos.x - a.snap.players[i].pos.x) * t;
     s.players[i].pos.y = a.snap.players[i].pos.y + (b.snap.players[i].pos.y - a.snap.players[i].pos.y) * t;
-    // aim/hp/alive from newer
-    s.players[i].aimRad = b.snap.players[i].aimRad;
+
+    // Smooth aim; snap discrete state from newer.
+    s.players[i].aimRad = lerpAngle(a.snap.players[i].aimRad, b.snap.players[i].aimRad, t);
     s.players[i].hp = b.snap.players[i].hp;
     s.players[i].alive = b.snap.players[i].alive;
   }
-  // projectiles: just show newer for simplicity
-  s.projectiles = b.snap.projectiles;
+
+  // Projectiles: interpolate position when present in both snapshots; otherwise use newer.
+  for (int i=0;i<kMaxProjectiles;i++) {
+    const auto& ap = a.snap.projectiles[i];
+    const auto& bp = b.snap.projectiles[i];
+    if (ap.active && bp.active) {
+      s.projectiles[i] = bp;
+      s.projectiles[i].pos.x = ap.pos.x + (bp.pos.x - ap.pos.x) * t;
+      s.projectiles[i].pos.y = ap.pos.y + (bp.pos.y - ap.pos.y) * t;
+    } else {
+      s.projectiles[i] = bp;
+    }
+  }
+
   s.tick = b.snap.tick;
   return s;
 }
