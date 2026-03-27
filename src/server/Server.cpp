@@ -79,6 +79,7 @@ void Server::broadcastSnapshot() {
     w.u8((uint8_t)p.hp);
     w.u8((uint8_t)(p.alive ? 1 : 0));
     w.u32(clients[i].connected ? clients[i].lastInputSeq : 0u);
+    w.f32(sim.fireCd[i]);
   }
 
   // Projectiles: send only active ones (lower bandwidth)

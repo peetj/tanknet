@@ -99,6 +99,7 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
       p.hp = (int)r.u8();
       p.alive = r.u8() != 0;
       v.ackSeq[i] = r.u32();
+      v.fireCd[i] = r.f32();
     }
 
     // Projectiles: clear then fill actives

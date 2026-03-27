@@ -13,6 +13,7 @@ struct ClientView {
   Snapshot snap{};
   uint64_t recvMs{0};
   std::array<uint32_t, kMaxPlayers> ackSeq{};
+  std::array<float, kMaxPlayers> fireCd{};
 };
 
 class Client {

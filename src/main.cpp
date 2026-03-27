@@ -198,12 +198,11 @@ int main(int argc, char** argv) {
       // Drop acked inputs
       while (!sent.empty() && sent.front().seq <= ack) sent.pop_front();
 
-      // Hard set local to server for my player, then re-sim pending inputs.
-      local.players[myIndex].pos = srvP.pos;
-      local.players[myIndex].vel = {0,0};
-      local.players[myIndex].aimRad = srvP.aimRad;
-      local.players[myIndex].hp = srvP.hp;
-      local.players[myIndex].alive = srvP.alive;
+      // Deterministic reconciliation: copy full sim state from server, then re-sim pending inputs.
+      local.tick = last.snap.tick;
+      local.players = last.snap.players;
+      local.projectiles = last.snap.projectiles;
+      local.fireCd = last.fireCd;
 
       for (const auto& si : sent) {
         std::array<InputCmd, kMaxPlayers> ins{};
@@ -211,11 +210,19 @@ int main(int argc, char** argv) {
         local.step(1.0f/(float)kTickHz, ins);
       }
 
-      // Always use local predicted player for immediate feel.
+      // Always use local predicted player/projectiles for immediate feel.
       renderSnap.players[myIndex].pos = local.players[myIndex].pos;
       renderSnap.players[myIndex].aimRad = local.players[myIndex].aimRad;
       renderSnap.players[myIndex].hp = local.players[myIndex].hp;
       renderSnap.players[myIndex].alive = local.players[myIndex].alive;
+
+      // Blend: show local-predicted projectiles for my shots (instant feedback), server for others.
+      for (int i=0;i<kMaxProjectiles;i++) {
+        const auto& lp = local.projectiles[i];
+        if (lp.active && lp.ownerId == renderSnap.players[myIndex].id) {
+          renderSnap.projectiles[i] = lp;
+        }
+      }
     }
 
     // Update window title with RTT (cheap HUD without extra deps)
