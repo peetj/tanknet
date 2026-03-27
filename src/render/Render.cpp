@@ -78,6 +78,89 @@ void Renderer::drawSnapshot(const Snapshot& s, uint32_t myPlayerIndex) {
   }
 }
 
+static void drawSeg(SDL_Renderer* r, int x, int y, int w, int h) {
+  SDL_Rect rc{x,y,w,h};
+  SDL_RenderFillRect(r, &rc);
+}
+
+// 7-seg digit (a,b,c,d,e,f,g)
+static void drawDigit7(SDL_Renderer* r, int x, int y, int s, int d) {
+  const int t = std::max(1, s/4);
+  const int w = s;
+  const int h = s*2;
+  const bool seg[10][7] = {
+    {1,1,1,1,1,1,0}, //0
+    {0,1,1,0,0,0,0}, //1
+    {1,1,0,1,1,0,1}, //2
+    {1,1,1,1,0,0,1}, //3
+    {0,1,1,0,0,1,1}, //4
+    {1,0,1,1,0,1,1}, //5
+    {1,0,1,1,1,1,1}, //6
+    {1,1,1,0,0,0,0}, //7
+    {1,1,1,1,1,1,1}, //8
+    {1,1,1,1,0,1,1}  //9
+  };
+  if (d < 0 || d > 9) return;
+
+  // a
+  if (seg[d][0]) drawSeg(r, x + t, y, w - 2*t, t);
+  // b
+  if (seg[d][1]) drawSeg(r, x + w - t, y + t, t, h/2 - t);
+  // c
+  if (seg[d][2]) drawSeg(r, x + w - t, y + h/2, t, h/2 - t);
+  // d
+  if (seg[d][3]) drawSeg(r, x + t, y + h - t, w - 2*t, t);
+  // e
+  if (seg[d][4]) drawSeg(r, x, y + h/2, t, h/2 - t);
+  // f
+  if (seg[d][5]) drawSeg(r, x, y + t, t, h/2 - t);
+  // g
+  if (seg[d][6]) drawSeg(r, x + t, y + h/2 - t/2, w - 2*t, t);
+}
+
+static void drawNumber(SDL_Renderer* r, int x, int y, int s, int n) {
+  if (n == 0) { drawDigit7(r, x, y, s, 0); return; }
+  int digits[10];
+  int c = 0;
+  int nn = n;
+  while (nn > 0 && c < 10) { digits[c++] = nn % 10; nn /= 10; }
+  for (int i=c-1;i>=0;i--) {
+    drawDigit7(r, x, y, s, digits[i]);
+    x += s + s/2;
+  }
+}
+
+void Renderer::drawHud(int hp0, int hp1, uint32_t rttMs, int resetSec) {
+  // Minimal HUD: HP left/right + RTT top-right + reset countdown center-top.
+  SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 120);
+  SDL_Rect bg{12, 12, 240, 54};
+  SDL_RenderFillRect(r, &bg);
+
+  // HP: green vs red
+  SDL_SetRenderDrawColor(r, 80, 200, 120, 255);
+  drawNumber(r, 20, 20, 14, std::max(0, hp0));
+  SDL_SetRenderDrawColor(r, 220, 90, 90, 255);
+  drawNumber(r, 90, 20, 14, std::max(0, hp1));
+
+  // RTT
+  SDL_SetRenderDrawColor(r, 220, 220, 220, 255);
+  SDL_Rect bg2{cfg.w - 160, 12, 148, 54};
+  SDL_SetRenderDrawColor(r, 0, 0, 0, 120);
+  SDL_RenderFillRect(r, &bg2);
+  SDL_SetRenderDrawColor(r, 220, 220, 220, 255);
+  drawNumber(r, cfg.w - 150, 20, 14, (int)rttMs);
+
+  // Reset countdown (if any)
+  if (resetSec > 0) {
+    SDL_Rect bg3{cfg.w/2 - 90, 12, 180, 54};
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 120);
+    SDL_RenderFillRect(r, &bg3);
+    SDL_SetRenderDrawColor(r, 240, 220, 60, 255);
+    drawNumber(r, cfg.w/2 - 20, 20, 14, resetSec);
+  }
+}
+
 void Renderer::end() {
   SDL_RenderPresent(r);
 }

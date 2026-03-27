@@ -18,7 +18,9 @@ public:
   void begin();
   void drawWorld(const World& world);
   void drawSnapshot(const Snapshot& s, uint32_t myPlayerIndex);
+  void drawHud(int hp0, int hp1, uint32_t rttMs, int resetSec);
   void end();
+
 
   SDL_Window* window{nullptr};
   SDL_Renderer* r{nullptr};

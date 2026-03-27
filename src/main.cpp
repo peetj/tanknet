@@ -246,6 +246,14 @@ int main(int argc, char** argv) {
     rr.begin();
     rr.drawWorld(local.world);
     rr.drawSnapshot(renderSnap, myIndex);
+
+    int resetSec = 0;
+    if (!net.snapshots().empty()) {
+      const float rt = net.snapshots().back().roundResetTimer;
+      if (rt > 0.0f) resetSec = (int)std::ceil(rt);
+    }
+    rr.drawHud(renderSnap.players[0].hp, renderSnap.players[1].hp, net.rttMs(), resetSec);
+
     rr.end();
 
     // Manual cap to reduce CPU burn; keep low (1-2ms).
