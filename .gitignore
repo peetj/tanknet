@@ -1,0 +1,16 @@
+# build artifacts
+/build/
+/out/
+/.vs/
+CMakeSettings.json
+CMakeUserPresets.json
+
+# vcpkg
+vcpkg_installed/
+
+# misc
+*.user
+*.suo
+*.pdb
+*.ilk
+*.log
