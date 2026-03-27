@@ -15,4 +15,7 @@ enum class MsgType : uint8_t {
   Pong = 6          // both
 };
 
+// Snapshot includes per-player ack of last processed input sequence.
+
+
 } // namespace tn

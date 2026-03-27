@@ -40,6 +40,8 @@ private:
   std::optional<int> allocSlot(ENetPeer* peer);
   void sendWelcome(ENetPeer* peer, uint32_t playerIndex);
   void broadcastSnapshot();
+  void resetRound();
+  float roundResetTimer{0.0f};
 };
 
 } // namespace tn

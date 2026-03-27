@@ -12,6 +12,7 @@ namespace tn {
 struct ClientView {
   Snapshot snap{};
   uint64_t recvMs{0};
+  std::array<uint32_t, kMaxPlayers> ackSeq{};
 };
 
 class Client {
@@ -32,6 +33,7 @@ public:
 
   // Latest snapshot for rendering/interp.
   const std::deque<ClientView>& snapshots() const { return views; }
+  uint32_t rttMs() const;
 
 private:
   NetConfig cfg;

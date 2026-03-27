@@ -98,24 +98,31 @@ void Client::handlePacket(const uint8_t* data, size_t len) {
       p.aimRad = r.f32();
       p.hp = (int)r.u8();
       p.alive = r.u8() != 0;
+      v.ackSeq[i] = r.u32();
     }
 
-    const uint16_t pc = r.u16();
-    (void)pc;
-    for (int i=0;i<kMaxProjectiles;i++) {
-      auto& pr = v.snap.projectiles[i];
-      pr.active = r.u8() != 0;
-      if (pr.active) {
-        pr.ownerId = r.u32();
-        pr.pos.x = r.f32(); pr.pos.y = r.f32();
-        pr.vel.x = r.f32(); pr.vel.y = r.f32();
-        pr.ttl = r.f32();
-      }
+    // Projectiles: clear then fill actives
+    for (auto& pr : v.snap.projectiles) pr = {};
+    const uint16_t active = r.u16();
+    for (uint16_t n=0;n<active;n++) {
+      const uint16_t idx = r.u16();
+      if (idx >= kMaxProjectiles) break;
+      auto& pr = v.snap.projectiles[idx];
+      pr.active = true;
+      pr.ownerId = r.u32();
+      pr.pos.x = r.f32(); pr.pos.y = r.f32();
+      pr.vel.x = r.f32(); pr.vel.y = r.f32();
+      pr.ttl = r.f32();
     }
 
     views.push_back(v);
     while (views.size() > 32) views.pop_front();
   }
+}
+
+uint32_t Client::rttMs() const {
+  if (!peer) return 0;
+  return (uint32_t)peer->roundTripTime;
 }
 
 void Client::pumpNetwork() {

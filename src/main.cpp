@@ -107,14 +107,15 @@ int main(int argc, char** argv) {
   bool running = true;
 
   uint32_t inputSeq = 0;
-  struct SentInput { uint32_t seq; InputCmd cmd; Vec2 predictedPos; };
-  std::deque<SentInput> sent;
+  struct SentInput { uint32_t seq; InputCmd cmd; };
+  std::deque<SentInput> sent; // unacked inputs
 
   const uint64_t interpDelayMs = 80; // small buffer for jitter hiding
 
   uint64_t lastMs = nowMs();
   uint64_t lastInputSendMs = nowMs();
 
+  uint64_t lastTitleMs = nowMs();
   while (running) {
     // Events
     SDL_Event e;
@@ -157,8 +158,8 @@ int main(int argc, char** argv) {
       std::array<InputCmd, kMaxPlayers> ins{};
       ins[myIndex] = cmd;
       local.step(1.0f/(float)kTickHz, ins);
-      sent.push_back({cmd.seq, cmd, local.players[myIndex].pos});
-      while (sent.size() > 256) sent.pop_front();
+      sent.push_back({cmd.seq, cmd});
+      while (sent.size() > 512) sent.pop_front();
     }
 
     // Send input at inputHz
@@ -189,18 +190,42 @@ int main(int argc, char** argv) {
         renderSnap = views.back().snap;
       }
 
-      // Reconcile local player position to latest server snapshot softly (cheap, stable).
-      const auto& srv = views.back().snap.players[myIndex];
-      Vec2 lp = local.players[myIndex].pos;
-      Vec2 d = {srv.pos.x - lp.x, srv.pos.y - lp.y};
-      const float err2 = len2(d);
-      if (err2 > 6.0f*6.0f) {
-        local.players[myIndex].pos = {lp.x + d.x*0.35f, lp.y + d.y*0.35f};
+      // Proper reconciliation: set local state from latest server snap, then reapply unacked inputs.
+      const auto& last = views.back();
+      const auto& srvP = last.snap.players[myIndex];
+      const uint32_t ack = last.ackSeq[myIndex];
+
+      // Drop acked inputs
+      while (!sent.empty() && sent.front().seq <= ack) sent.pop_front();
+
+      // Hard set local to server for my player, then re-sim pending inputs.
+      local.players[myIndex].pos = srvP.pos;
+      local.players[myIndex].vel = {0,0};
+      local.players[myIndex].aimRad = srvP.aimRad;
+      local.players[myIndex].hp = srvP.hp;
+      local.players[myIndex].alive = srvP.alive;
+
+      for (const auto& si : sent) {
+        std::array<InputCmd, kMaxPlayers> ins{};
+        ins[myIndex] = si.cmd;
+        local.step(1.0f/(float)kTickHz, ins);
       }
 
       // Always use local predicted player for immediate feel.
       renderSnap.players[myIndex].pos = local.players[myIndex].pos;
       renderSnap.players[myIndex].aimRad = local.players[myIndex].aimRad;
+      renderSnap.players[myIndex].hp = local.players[myIndex].hp;
+      renderSnap.players[myIndex].alive = local.players[myIndex].alive;
+    }
+
+    // Update window title with RTT (cheap HUD without extra deps)
+    if (net.hasWelcome() && rr.window && (ms - lastTitleMs) > 250) {
+      lastTitleMs = ms;
+      // ENet RTT is in ms on the peer.
+      // (Not perfect but good enough for feedback.)
+      const char* title = "TankNet";
+      std::string t = std::string(title) + " | rtt=" + std::to_string(net.rttMs()) + "ms";
+      SDL_SetWindowTitle(rr.window, t.c_str());
     }
 
     rr.begin();

@@ -70,7 +70,7 @@ void Server::broadcastSnapshot() {
   w.u8((uint8_t)MsgType::Snapshot);
   w.u32(s.tick);
 
-  // Players
+  // Players + last processed input seq (ack)
   for (int i=0;i<kMaxPlayers;i++) {
     const auto& p = s.players[i];
     w.u32(p.id);
@@ -78,19 +78,21 @@ void Server::broadcastSnapshot() {
     w.f32(p.aimRad);
     w.u8((uint8_t)p.hp);
     w.u8((uint8_t)(p.alive ? 1 : 0));
+    w.u32(clients[i].connected ? clients[i].lastInputSeq : 0u);
   }
 
-  // Projectiles (simple full state, still small)
-  w.u16((uint16_t)kMaxProjectiles);
+  // Projectiles: send only active ones (lower bandwidth)
+  uint16_t activeCount = 0;
+  for (int i=0;i<kMaxProjectiles;i++) if (s.projectiles[i].active) activeCount++;
+  w.u16(activeCount);
   for (int i=0;i<kMaxProjectiles;i++) {
     const auto& pr = s.projectiles[i];
-    w.u8(pr.active ? 1 : 0);
-    if (pr.active) {
-      w.u32(pr.ownerId);
-      w.f32(pr.pos.x); w.f32(pr.pos.y);
-      w.f32(pr.vel.x); w.f32(pr.vel.y);
-      w.f32(pr.ttl);
-    }
+    if (!pr.active) continue;
+    w.u16((uint16_t)i);
+    w.u32(pr.ownerId);
+    w.f32(pr.pos.x); w.f32(pr.pos.y);
+    w.f32(pr.vel.x); w.f32(pr.vel.y);
+    w.f32(pr.ttl);
   }
 
   auto* pkt = enet_packet_create(w.b.data(), w.b.size(), 0);
@@ -133,6 +135,11 @@ void Server::handlePacket(ENetPeer* peer, const uint8_t* data, size_t len) {
   }
 }
 
+void Server::resetRound() {
+  sim.init();
+  roundResetTimer = 0.0f;
+}
+
 void Server::run() {
   constexpr float dt = 1.0f / (float)kTickHz;
 
@@ -167,6 +174,17 @@ void Server::run() {
         ins[i] = clients[i].connected ? clients[i].lastInput : InputCmd{};
       }
       sim.step(dt, ins);
+
+      // Round reset when a player dies.
+      const bool p0 = sim.players[0].alive;
+      const bool p1 = sim.players[1].alive;
+      if (!(p0 && p1)) {
+        if (roundResetTimer <= 0.0f) roundResetTimer = 2.0f; // seconds
+      }
+      if (roundResetTimer > 0.0f) {
+        roundResetTimer -= dt;
+        if (roundResetTimer <= 0.0f) resetRound();
+      }
     }
 
     // Snapshots
